@@ -48,6 +48,18 @@
 using namespace vn::protocol::uart;
 using namespace vn::sensors;
 
+// File writers for GPS, IMU, INS streams
+ofstream imu_writer;
+ofstream ins_writer;
+ofstream gps_writer;
+ofstream sync_in_writer;
+
+mutex ins_data_mutex;
+mutex gps_data_mutex;
+mutex imu_data_mutex;
+
+std::string session_dir;
+
 // Signal-safe flag for whether shutdown is requested
 sig_atomic_t volatile g_request_shutdown = 0;
 
@@ -509,7 +521,6 @@ int main(int argc, char* argv[])
         ATTITUDEGROUP_NONE,
         INSGROUP_NONE);
 
-
     CommonGroup ins_common_group = COMMONGROUP_TIMEGPS | COMMONGROUP_TIMESYNCIN
         | COMMONGROUP_YAWPITCHROLL | COMMONGROUP_POSITION
         | COMMONGROUP_VELOCITY | COMMONGROUP_INSSTATUS | COMMONGROUP_SYNCINCNT;
@@ -571,6 +582,26 @@ int main(int argc, char* argv[])
     vn200.writeGpsAntennaOffset(position);
     vn200.registerAsyncPacketReceivedHandler(NULL, binaryMessageReceived);
 
+    // Copying rig_id and session_id checks from pointgrey_node
+    if (!ros::param::has("/rig_id")) {
+        ROS_FATAL("/rig_id not set. Check launch file.");
+        exit(1);
+    }
+    ros::param::get("/rig_id", rig_id);
+
+    // Wait for the session_starter.
+    int retries = 4;
+    while (retries && !ros::param::has("/session_id")) {
+        --retries;
+        sleep(1);
+    }
+    if (!ros::param::has("/session_id")) {
+        ROS_FATAL("No session started");
+        exit(2);
+    }
+    ros::param::get("/session_id", session_id);
+    ros::param::get("/session_path", session_dir);
+
     while (!g_request_shutdown) {
         ros::spinOnce();
         usleep(500);
@@ -579,4 +610,3 @@ int main(int argc, char* argv[])
     vn200.unregisterAsyncPacketReceivedHandler();
     ros::shutdown();
 }
-
