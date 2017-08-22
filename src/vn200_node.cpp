@@ -305,6 +305,8 @@ void binaryMessageReceived(void * user_data, Packet & p, size_t index)
             gps_binary_data.vel_sigma =  p.extractFloat();
             gps_binary_data.time_sigma = p.extractFloat();
 
+            gps_writer.write(reinterpret_cast<const char *>(&gps_binary_data),sizeof(gps_binary_data_struct));
+
             publish_gps_data();
             if (remainder(gps_msg_count, 16) == 0) {
                 gps_msg_count = 0;
@@ -333,6 +335,8 @@ void binaryMessageReceived(void * user_data, Packet & p, size_t index)
             ins_binary_data.pos_sigma =     p.extractFloat();
             ins_binary_data.vel_sigma =     p.extractFloat();
 
+            ins_writer.write(reinterpret_cast<const char *>(&ins_binary_data),sizeof(ins_binary_data_struct));
+
             publish_ins_data();
 
             if (remainder(ins_msg_count, 100) == 0) {
@@ -349,6 +353,8 @@ void binaryMessageReceived(void * user_data, Packet & p, size_t index)
             imu_binary_data.gps_time =     p.extractUint64();
             imu_binary_data.accel =        p.extractVec3f();
             imu_binary_data.angular_rate = p.extractVec3f();
+
+            imu_writer.write(reinterpret_cast<const char *>(&imu_binary_data),sizeof(imu_binary_data_struct));
 
             publish_imu_data();
             if (remainder(imu_msg_count, 500) == 0) {
@@ -600,7 +606,21 @@ int main(int argc, char* argv[])
         exit(2);
     }
     ros::param::get("/session_id", session_id);
+
+    // Setup stream writers
     ros::param::get("/session_path", session_dir);
+    std::string gps_filename = session_dir + "/gps.bin";
+    std::string imu_filename = session_dir + "/imu.bin";
+    std::string ins_filename = session_dir + "/ins.bin";
+
+    gps_writer.open(gps_filename.c_str(), ios::out | ios::binary);
+    ins_writer.open(ins_filename.c_str(), ios::out | ios::binary);
+    imu_writer.open(imu_filename.c_str(), ios::out | ios::binary);
+
+    if (gps_writer.bad() || ins_writer.bad() || imu_writer.bad()) {
+        ROS_FATAL_STREAM("Problem opening pose file for write. Check permissions.");
+        exit(1);
+    }
 
     while (!g_request_shutdown) {
         ros::spinOnce();
@@ -608,5 +628,8 @@ int main(int argc, char* argv[])
     }
 
     vn200.unregisterAsyncPacketReceivedHandler();
+    gps_writer.close();
+    imu_writer.close();
+    ins_writer.close();
     ros::shutdown();
 }
