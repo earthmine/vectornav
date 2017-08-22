@@ -412,6 +412,7 @@ int main(int argc, char* argv[])
     n_.param<int>(        "poll_rate_gps"   , poll_rate_gps, 5);
     n_.param<int>(        "poll_rate_ins"   , poll_rate_ins, 20);
     n_.param<int>(        "poll_rate_imu"   , poll_rate_imu, 100);
+    n_.param<std::string>("second_serial", port2   , "/dev/ttyTHS1");
 
     n_.param<std::string>("imu/frame_id", imu_frame_id, "LLA");
     n_.param<std::string>("gps/frame_id", gps_frame_id, "LLA");
@@ -482,10 +483,10 @@ int main(int argc, char* argv[])
         exit(EXIT_FAILURE);
     }
 
-    ROS_INFO("Initializing vn200_2. Port:%s Baud:%d\n", "/dev/ttyTHS1", baud);
+    ROS_INFO("Initializing vn200_2. Port:%s Baud:%d\n", port2.c_str(), baud);
 
     try {
-        vn200_2.connect("/dev/ttyTHS1", baud);
+        vn200_2.connect(port, baud);
     } catch (...) {
         ROS_FATAL("Couldn't connect second serial port");
         exit(EXIT_FAILURE);
