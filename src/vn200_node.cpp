@@ -93,7 +93,7 @@ struct utc_time_struct
     uint8_t minute;
     uint8_t second;
     uint16_t millisecond;
-};
+} __attribute__((packed));
 
 struct ins_binary_data_struct 
 {
@@ -108,7 +108,7 @@ struct ins_binary_data_struct
     vn::math::vec3f ypru;
     float pos_sigma;
     float vel_sigma;
-};
+} __attribute__((packed));
 
 ins_binary_data_struct ins_binary_data;
 
@@ -124,7 +124,7 @@ struct gps_binary_data_struct
     vn::math::vec3f posu;
     float vel_sigma;
     float time_sigma;
-};
+} __attribute__((packed));
 
 struct gps_binary_data_struct gps_binary_data;
 
@@ -133,7 +133,7 @@ struct imu_binary_data_struct
     uint64_t gps_time;
     vn::math::vec3f accel;
     vn::math::vec3f angular_rate;
-};
+} __attribute__((packed));
 
 struct imu_binary_data_struct imu_binary_data;
 
