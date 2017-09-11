@@ -44,19 +44,15 @@
 #include <ros/xmlrpc_manager.h>
 
 #include <iostream>
+#include <fstream>
 
 using namespace vn::protocol::uart;
 using namespace vn::sensors;
 
 // File writers for GPS, IMU, INS streams
-ofstream imu_writer;
-ofstream ins_writer;
-ofstream gps_writer;
-ofstream sync_in_writer;
-
-mutex ins_data_mutex;
-mutex gps_data_mutex;
-mutex imu_data_mutex;
+std::ofstream imu_writer;
+std::ofstream ins_writer;
+std::ofstream gps_writer;
 
 std::string session_dir;
 
@@ -85,6 +81,7 @@ int last_group_number = 0;
 
 
 std::string port;
+std::string port2;
 char vn_error_msg[100];
 
 struct utc_time_struct
@@ -96,7 +93,7 @@ struct utc_time_struct
     uint8_t minute;
     uint8_t second;
     uint16_t millisecond;
-};
+} __attribute__((packed));
 
 struct ins_binary_data_struct 
 {
@@ -111,7 +108,7 @@ struct ins_binary_data_struct
     vn::math::vec3f ypru;
     float pos_sigma;
     float vel_sigma;
-};
+} __attribute__((packed));
 
 ins_binary_data_struct ins_binary_data;
 
@@ -127,7 +124,7 @@ struct gps_binary_data_struct
     vn::math::vec3f posu;
     float vel_sigma;
     float time_sigma;
-};
+} __attribute__((packed));
 
 struct gps_binary_data_struct gps_binary_data;
 
@@ -136,7 +133,7 @@ struct imu_binary_data_struct
     uint64_t gps_time;
     vn::math::vec3f accel;
     vn::math::vec3f angular_rate;
-};
+} __attribute__((packed));
 
 struct imu_binary_data_struct imu_binary_data;
 
@@ -500,7 +497,7 @@ int main(int argc, char* argv[])
                 baud); 
         exit(EXIT_FAILURE);
     }
-
+/*
     ROS_INFO("Initializing vn200_2. Port:%s Baud:%d\n", port2.c_str(), baud);
 
     try {
@@ -512,7 +509,7 @@ int main(int argc, char* argv[])
 
     vn200_2.writeAsyncDataOutputType(VNGPS);
     vn200_2.disconnect();
-
+*/
     GpsGroup gps_gps_group = GPSGROUP_UTC | GPSGROUP_TOW | GPSGROUP_WEEK
         | GPSGROUP_NUMSATS | GPSGROUP_FIX | GPSGROUP_POSLLA | GPSGROUP_VELNED
         | GPSGROUP_POSU | GPSGROUP_VELU | GPSGROUP_TIMEU;
@@ -593,7 +590,6 @@ int main(int argc, char* argv[])
         ROS_FATAL("/rig_id not set. Check launch file.");
         exit(1);
     }
-    ros::param::get("/rig_id", rig_id);
 
     // Wait for the session_starter.
     int retries = 4;
@@ -605,7 +601,6 @@ int main(int argc, char* argv[])
         ROS_FATAL("No session started");
         exit(2);
     }
-    ros::param::get("/session_id", session_id);
 
     // Setup stream writers
     ros::param::get("/session_path", session_dir);
@@ -613,9 +608,11 @@ int main(int argc, char* argv[])
     std::string imu_filename = session_dir + "/imu.bin";
     std::string ins_filename = session_dir + "/ins.bin";
 
-    gps_writer.open(gps_filename.c_str(), ios::out | ios::binary);
-    ins_writer.open(ins_filename.c_str(), ios::out | ios::binary);
-    imu_writer.open(imu_filename.c_str(), ios::out | ios::binary);
+    ROS_INFO("%s",gps_filename.c_str());
+
+    gps_writer.open(gps_filename.c_str(), std::ios::out | std::ios::binary);
+    ins_writer.open(ins_filename.c_str(), std::ios::out | std::ios::binary);
+    imu_writer.open(imu_filename.c_str(), std::ios::out | std::ios::binary);
 
     if (gps_writer.bad() || ins_writer.bad() || imu_writer.bad()) {
         ROS_FATAL_STREAM("Problem opening pose file for write. Check permissions.");
