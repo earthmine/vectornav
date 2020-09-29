@@ -44,9 +44,17 @@
 #include <ros/xmlrpc_manager.h>
 
 #include <iostream>
+#include <fstream>
 
 using namespace vn::protocol::uart;
 using namespace vn::sensors;
+
+// File writers for GPS, IMU, INS streams
+std::ofstream imu_writer;
+std::ofstream ins_writer;
+std::ofstream gps_writer;
+
+std::string session_dir;
 
 // Signal-safe flag for whether shutdown is requested
 sig_atomic_t volatile g_request_shutdown = 0;
@@ -63,6 +71,7 @@ ros::Publisher pub_sync_in;
 
 // Device
 vn::sensors::VnSensor vn200;
+vn::sensors::VnSensor vn200_2;
 
 int ins_seq           = 0;
 int imu_seq           = 0;
@@ -72,6 +81,7 @@ int last_group_number = 0;
 
 
 std::string port;
+std::string port2;
 char vn_error_msg[100];
 
 struct utc_time_struct
@@ -83,7 +93,7 @@ struct utc_time_struct
     uint8_t minute;
     uint8_t second;
     uint16_t millisecond;
-};
+} __attribute__((packed));
 
 struct ins_binary_data_struct 
 {
@@ -98,7 +108,7 @@ struct ins_binary_data_struct
     vn::math::vec3f ypru;
     float pos_sigma;
     float vel_sigma;
-};
+} __attribute__((packed));
 
 ins_binary_data_struct ins_binary_data;
 
@@ -114,7 +124,7 @@ struct gps_binary_data_struct
     vn::math::vec3f posu;
     float vel_sigma;
     float time_sigma;
-};
+} __attribute__((packed));
 
 struct gps_binary_data_struct gps_binary_data;
 
@@ -123,7 +133,7 @@ struct imu_binary_data_struct
     uint64_t gps_time;
     vn::math::vec3f accel;
     vn::math::vec3f angular_rate;
-};
+} __attribute__((packed));
 
 struct imu_binary_data_struct imu_binary_data;
 
@@ -292,6 +302,8 @@ void binaryMessageReceived(void * user_data, Packet & p, size_t index)
             gps_binary_data.vel_sigma =  p.extractFloat();
             gps_binary_data.time_sigma = p.extractFloat();
 
+            gps_writer.write(reinterpret_cast<const char *>(&gps_binary_data),sizeof(gps_binary_data_struct));
+
             publish_gps_data();
             if (remainder(gps_msg_count, 16) == 0) {
                 gps_msg_count = 0;
@@ -320,6 +332,8 @@ void binaryMessageReceived(void * user_data, Packet & p, size_t index)
             ins_binary_data.pos_sigma =     p.extractFloat();
             ins_binary_data.vel_sigma =     p.extractFloat();
 
+            ins_writer.write(reinterpret_cast<const char *>(&ins_binary_data),sizeof(ins_binary_data_struct));
+
             publish_ins_data();
 
             if (remainder(ins_msg_count, 100) == 0) {
@@ -336,6 +350,8 @@ void binaryMessageReceived(void * user_data, Packet & p, size_t index)
             imu_binary_data.gps_time =     p.extractUint64();
             imu_binary_data.accel =        p.extractVec3f();
             imu_binary_data.angular_rate = p.extractVec3f();
+
+            imu_writer.write(reinterpret_cast<const char *>(&imu_binary_data),sizeof(imu_binary_data_struct));
 
             publish_imu_data();
             if (remainder(imu_msg_count, 500) == 0) {
@@ -411,6 +427,7 @@ int main(int argc, char* argv[])
     n_.param<int>(        "poll_rate_gps"   , poll_rate_gps, 5);
     n_.param<int>(        "poll_rate_ins"   , poll_rate_ins, 20);
     n_.param<int>(        "poll_rate_imu"   , poll_rate_imu, 100);
+    n_.param<std::string>("second_serial", port2   , "/dev/ttyTHS1");
 
     n_.param<std::string>("imu/frame_id", imu_frame_id, "LLA");
     n_.param<std::string>("gps/frame_id", gps_frame_id, "LLA");
@@ -466,6 +483,7 @@ int main(int argc, char* argv[])
     pub_gps     = n_.advertise<vectornav::gps>    ("gps", 1000);
     pub_sensors = n_.advertise<vectornav::sensors>("imu", 1000);
 
+
     // Initialize VectorNav
     //VN_ERROR_CODE vn_retval;
     ROS_INFO("Initializing vn200. Port:%s Baud:%d\n", port.c_str(), baud);
@@ -473,13 +491,25 @@ int main(int argc, char* argv[])
     try {
         vn200.connect(port, baud);
     } catch (...) {
-        ROS_FATAL("Could not conenct to vn200 on port:%s @ Baud:%d;"
+        ROS_FATAL("Could not connect to vn200 on port:%s @ Baud:%d;"
                 "Did you add your user to the 'dialout' group in /etc/group?", 
                 port.c_str(), 
                 baud); 
         exit(EXIT_FAILURE);
     }
+/*
+    ROS_INFO("Initializing vn200_2. Port:%s Baud:%d\n", port2.c_str(), baud);
 
+    try {
+        vn200_2.connect(port, baud);
+    } catch (...) {
+        ROS_FATAL("Couldn't connect second serial port");
+        exit(EXIT_FAILURE);
+    }
+
+    vn200_2.writeAsyncDataOutputType(VNGPS);
+    vn200_2.disconnect();
+*/
     GpsGroup gps_gps_group = GPSGROUP_UTC | GPSGROUP_TOW | GPSGROUP_WEEK
         | GPSGROUP_NUMSATS | GPSGROUP_FIX | GPSGROUP_POSLLA | GPSGROUP_VELNED
         | GPSGROUP_POSU | GPSGROUP_VELU | GPSGROUP_TIMEU;
@@ -493,7 +523,6 @@ int main(int argc, char* argv[])
         gps_gps_group,
         ATTITUDEGROUP_NONE,
         INSGROUP_NONE);
-
 
     CommonGroup ins_common_group = COMMONGROUP_TIMEGPS | COMMONGROUP_TIMESYNCIN
         | COMMONGROUP_YAWPITCHROLL | COMMONGROUP_POSITION
@@ -535,7 +564,6 @@ int main(int argc, char* argv[])
     vn200.writeBinaryOutput2(ins_log_reg);
     vn200.writeBinaryOutput3(imu_log_reg);
 
-
     ROS_INFO("About to set SynchronizationControl");
 
     vn::sensors::SynchronizationControlRegister sync_control(
@@ -557,12 +585,48 @@ int main(int argc, char* argv[])
     vn200.writeGpsAntennaOffset(position);
     vn200.registerAsyncPacketReceivedHandler(NULL, binaryMessageReceived);
 
+    // Copying rig_id and session_id checks from pointgrey_node
+    if (!ros::param::has("/rig_id")) {
+        ROS_FATAL("/rig_id not set. Check launch file.");
+        exit(1);
+    }
+
+    // Wait for the session_starter.
+    int retries = 4;
+    while (retries && !ros::param::has("/session_id")) {
+        --retries;
+        sleep(1);
+    }
+    if (!ros::param::has("/session_id")) {
+        ROS_FATAL("No session started");
+        exit(2);
+    }
+
+    // Setup stream writers
+    ros::param::get("/session_path", session_dir);
+    std::string gps_filename = session_dir + "/gps.bin";
+    std::string imu_filename = session_dir + "/imu.bin";
+    std::string ins_filename = session_dir + "/ins.bin";
+
+    ROS_INFO("%s",gps_filename.c_str());
+
+    gps_writer.open(gps_filename.c_str(), std::ios::out | std::ios::binary);
+    ins_writer.open(ins_filename.c_str(), std::ios::out | std::ios::binary);
+    imu_writer.open(imu_filename.c_str(), std::ios::out | std::ios::binary);
+
+    if (gps_writer.bad() || ins_writer.bad() || imu_writer.bad()) {
+        ROS_FATAL_STREAM("Problem opening pose file for write. Check permissions.");
+        exit(1);
+    }
+
     while (!g_request_shutdown) {
         ros::spinOnce();
         usleep(500);
     }
 
     vn200.unregisterAsyncPacketReceivedHandler();
+    gps_writer.close();
+    imu_writer.close();
+    ins_writer.close();
     ros::shutdown();
 }
-
