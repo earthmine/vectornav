@@ -232,12 +232,13 @@ int main(int argc, char *argv[])
             ASYNCMODE_PORT1,
             SensorImuRate / async_output_rate,  // update rate [ms]
             COMMONGROUP_QUATERNION
-			| COMMONGROUP_YAWPITCHROLL
+            | COMMONGROUP_YAWPITCHROLL
             | COMMONGROUP_ANGULARRATE
             | COMMONGROUP_POSITION
             | COMMONGROUP_ACCEL
             | COMMONGROUP_MAGPRES,
-            TIMEGROUP_GPSTOW
+            TIMEGROUP_NONE
+            | TIMEGROUP_GPSTOW
             | TIMEGROUP_GPSWEEK
             | TIMEGROUP_TIMEUTC,
             IMUGROUP_NONE,
@@ -245,6 +246,9 @@ int main(int argc, char *argv[])
             ATTITUDEGROUP_YPRU, //<-- returning yaw pitch roll uncertainties
             INSGROUP_INSSTATUS
             | INSGROUP_POSLLA
+            | INSGROUP_POSECEF
+            | INSGROUP_VELBODY
+            | INSGROUP_ACCELECEF
             | INSGROUP_VELNED
             | INSGROUP_POSU
             | INSGROUP_VELU,
@@ -430,9 +434,9 @@ void BinaryAsyncMessageReceived(void* userData, Packet& p, size_t index)
                 msgOdom.pose.pose.orientation.z = q[2];
                 msgOdom.pose.pose.orientation.w = q[3];
             }
-            if (cd.hasVelocityEstimatedNed())
+            if (cd.hasVelocityEstimatedBody())
             {
-                vec3f vel = cd.velocityEstimatedNed();
+                vec3f vel = cd.velocityEstimatedBody();
 
                 msgOdom.twist.twist.linear.x = vel[0];
                 msgOdom.twist.twist.linear.y = vel[1];
